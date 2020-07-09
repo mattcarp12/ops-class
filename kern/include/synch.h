@@ -160,6 +160,13 @@ struct rwlock {
   char *rwlock_name;
   // add what you need here
   // (don't forget to mark things volatile as needed)
+  struct lock *lock;
+  struct cv *read_cv;
+  struct cv *write_cv;
+  int active_readers;
+  int active_writers;
+  int waiting_readers;
+  int waiting_writers;
 };
 
 struct rwlock *rwlock_create(const char *);
