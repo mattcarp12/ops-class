@@ -40,52 +40,114 @@
 #include <test.h>
 #include <synch.h>
 
+#define MALE 0
+#define FEMALE 1
+#define MATCHMAKER 2
+
+struct lock *whalelock;
+struct cv *male_cv;
+struct cv *female_cv;
+struct cv *matchmaker_cv;
+int state[3] = {0, 0, 0}; // State of male, female, and matchmaker
+void set_state(void);
+void broadcast_all(void);
+
 /*
  * Called by the driver during initialization.
  */
 
 void whalemating_init() {
-	return;
+  whalelock = lock_create("whale");
+  male_cv = cv_create("male");
+  female_cv = cv_create("female");
+  matchmaker_cv = cv_create("matchmaker");
 }
 
 /*
  * Called by the driver during teardown.
  */
 
-void
-whalemating_cleanup() {
-	return;
+void whalemating_cleanup() {
+  cv_destroy(matchmaker_cv);
+  cv_destroy(female_cv);
+  cv_destroy(male_cv);
+  lock_destroy(whalelock);
 }
 
-void
-male(uint32_t index)
-{
-	(void)index;
-	/*
-	 * Implement this function by calling male_start and male_end when
-	 * appropriate.
-	 */
-	return;
+void male(uint32_t index) {
+  male_start(index);
+  lock_acquire(whalelock);
+
+  while (state[MALE] != 0) {
+    cv_wait(male_cv, whalelock);
+  }
+
+  state[MALE] = 1;
+  broadcast_all();
+
+  while (state[FEMALE] == 0 || state[MATCHMAKER] == 0) {
+    cv_wait(male_cv, whalelock);
+  }
+  state[MALE] = -1;
+  set_state();
+  broadcast_all();
+
+  lock_release(whalelock);
+  male_end(index);
 }
 
-void
-female(uint32_t index)
-{
-	(void)index;
-	/*
-	 * Implement this function by calling female_start and female_end when
-	 * appropriate.
-	 */
-	return;
+void female(uint32_t index) {
+  female_start(index);
+  lock_acquire(whalelock);
+
+  while (state[FEMALE] != 0) {
+    cv_wait(female_cv, whalelock);
+  }
+  state[FEMALE] = 1;
+  broadcast_all();
+
+  while (state[MALE] == 0 || state[MATCHMAKER] == 0) {
+    cv_wait(female_cv, whalelock);
+  }
+  state[FEMALE] = -1;
+  set_state();
+  broadcast_all();
+
+  lock_release(whalelock);
+  female_end(index);
 }
 
-void
-matchmaker(uint32_t index)
-{
-	(void)index;
-	/*
-	 * Implement this function by calling matchmaker_start and matchmaker_end
-	 * when appropriate.
-	 */
-	return;
+void matchmaker(uint32_t index) {
+  matchmaker_start(index);
+  lock_acquire(whalelock);
+
+  while (state[MATCHMAKER] != 0) {
+    cv_wait(matchmaker_cv, whalelock);
+  }
+  state[MATCHMAKER] = 1;
+  broadcast_all();
+
+  while (state[MALE] == 0 || state[FEMALE] == 0) {
+    cv_wait(matchmaker_cv, whalelock);
+  }
+  state[MATCHMAKER] = -1;
+  set_state();
+  broadcast_all();
+
+  lock_release(whalelock);
+  matchmaker_end(index);
+}
+
+void broadcast_all(void) {
+  cv_broadcast(male_cv, whalelock);
+  cv_broadcast(female_cv, whalelock);
+  cv_broadcast(matchmaker_cv, whalelock);
+}
+
+void set_state(void) {
+  if (state[MALE] == -1 && state[FEMALE] == -1 && state[MATCHMAKER] == -1) {
+    state[MALE] = 0;
+    state[FEMALE] = 0;
+    state[MATCHMAKER] = 0;
+  }
 }
